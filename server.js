@@ -9,6 +9,35 @@ const { signSession, requireAuth, optionalAuth, verifyWalletSignature } = requir
 const { missionCreate, submissionCreate, challengeCreate, badRequest, assessClaimQuality } = require('./lib/validation');
 const { adjudicate } = require('./lib/adjudicator');
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET must be set in production');
+}
+const clampBps = v => Math.max(0, Math.min(2000, Number(v) || 0));
+const feeBps = () => clampBps(process.env.PROTOCOL_FEE_BPS ?? 1000);
+const bondGen = () => Math.max(0, Number(process.env.CHALLENGE_BOND_GEN ?? 0));
+const escrowRequired = () => process.env.REQUIRE_CREATOR_ESCROW === '1';
+
+// available earned balance = earned minus outstanding escrows (missions funded + bonds)
+async function availableEarned(userId) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(r.total_earned_micros,0)
+            - COALESCE((SELECT SUM(amount) FROM rewards WHERE funder_id=$1 AND status='FUNDED' AND kind='MISSION'),0)
+            - COALESCE((SELECT SUM(bond_amount) FROM challenges WHERE challenger=$1 AND bond_status='ESCROWED'),0)
+            AS avail FROM reputation r WHERE r.user_id=$1`, [userId]);
+  return Number(rows[0]?.avail || 0);
+}
+
+function normalizeUrl(u) {
+  try {
+    const x = new URL(u);
+    x.hash = '';
+    if ((x.protocol === 'https:' && x.port === '443') || (x.protocol === 'http:' && x.port === '80')) x.port = '';
+    for (const k of [...x.searchParams.keys()]) if (/^(utm_|fbclid|gclid|mc_cid|mc_eid)/i.test(k)) x.searchParams.delete(k);
+    x.searchParams.sort();
+    return x.toString().replace(/\/$/, '').toLowerCase();
+  } catch { return String(u); }
+}
+
 const app = express();
 app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -27,6 +56,7 @@ async function rateLimit(req, res, next) {
       return res.status(429).json({ error: 'rate limit exceeded, slow down' });
     }
     await db.query(`INSERT INTO request_log(actor, route) VALUES ($1,$2)`, [actor, route]);
+    if (Math.random() < 0.02) await db.query(`DELETE FROM request_log WHERE created_at < now() - interval '2 hours'`);
     next();
   } catch (e) { next(); }
 }
@@ -54,13 +84,14 @@ app.post('/api/auth/wallet/verify', wrap(async (req, res) => {
   const { rows } = await db.query(`SELECT nonce FROM nonce_store WHERE address=$1 AND created_at > now() - interval '15 minutes'`, [addr]);
   if (!rows.length) return res.status(400).json({ error: 'nonce expired or missing' });
   const ok = await verifyWalletSignature(addr, rows[0].nonce, signature);
+  await db.query(`DELETE FROM nonce_store WHERE address=$1`, [addr]); // single-use: no replay window
   if (!ok) return res.status(401).json({ error: 'signature verification failed' });
 
   let user = (await db.query(`SELECT id FROM users WHERE lower(wallet_address)=$1`, [addr])).rows[0];
   if (!user) {
     user = (await db.query(
       `INSERT INTO users(wallet_address, username, user_type) VALUES ($1,$2,$3) RETURNING id`,
-      [addr, 'researcher_' + addr.slice(2, 8), 'HUMAN'])).rows[0];
+      [addr.toLowerCase(), 'researcher_' + addr.slice(2, 8), 'HUMAN'])).rows[0];
   }
   res.json({ token: signSession(user.id), user_id: user.id });
 }));
@@ -102,8 +133,24 @@ app.get('/api/auth/me', requireAuth, wrap(async (req, res) => {
   res.json({ user: rows[0], reputation: rep });
 }));
 
+// Lazy expiry: OPEN missions past deadline close down; escrowed funding is
+// refunded to the funder when nobody won.
+async function expireStaleMissions() {
+  const { rows } = await db.query(
+    "UPDATE missions SET status='SUBMISSIONS_CLOSED', updated_at=NOW() WHERE status='OPEN' AND deadline < NOW() RETURNING id");
+  for (const m of rows) {
+    const ref = await db.query(
+      "UPDATE rewards SET status='CANCELLED', settled_at=NOW() WHERE mission_id=$1 AND status='FUNDED' AND kind='MISSION' RETURNING amount, funder_id", [m.id]);
+    if (ref.rowCount && ref.rows[0].funder_id && process.env.REQUIRE_CREATOR_ESCROW === '1') {
+      await db.query("UPDATE reputation SET total_earned_micros = total_earned_micros + $1 WHERE user_id=$2",
+                     [ref.rows[0].amount, ref.rows[0].funder_id]);
+    }
+  }
+}
+
 // ============================ MISSIONS ============================
 app.get('/api/missions', optionalAuth, wrap(async (req, res) => {
+  await expireStaleMissions();
   const { status, category, difficulty, q, sort = 'newest', min_reward, limit = 50, offset = 0 } = req.query;
   const where = []; const params = [];
   if (status && status !== 'all') { params.push(status); where.push(`m.status = $${params.length}`); }
@@ -127,6 +174,7 @@ app.get('/api/missions', optionalAuth, wrap(async (req, res) => {
 }));
 
 app.get('/api/missions/:id', wrap(async (req, res) => {
+  await expireStaleMissions();
   const { rows } = await db.query(
     `SELECT m.*, u.username AS creator_name,
        c.id AS claim_id, c.statement, c.verification_rules, c.required_source_types,
@@ -149,6 +197,17 @@ app.post('/api/missions', requireAuth, wrap(async (req, res) => {
   if (!p.success) return badRequest(res, p);
   const quality = assessClaimQuality(p.data.claim);
   const d = p.data;
+
+  // Anti-money-printer: when creator escrow is enabled, funding debits the
+  // creator's earned balance up-front. Rewards are then conserved within the
+  // system (winner gains what funder staked, minus the protocol fee).
+  if (escrowRequired()) {
+    const avail = await availableEarned(req.userId);
+    if (avail < d.reward_amount) {
+      return res.status(402).json({ error: 'insufficient earned balance to fund this mission',
+        required: d.reward_amount, available: avail });
+    }
+  }
   const { rows } = await db.query(
     `INSERT INTO missions(title, description, claim, verification_rules, required_evidence,
         required_source_types, reward_amount, currency, deadline, difficulty, category, creator, status)
@@ -158,10 +217,14 @@ app.post('/api/missions', requireAuth, wrap(async (req, res) => {
      JSON.stringify(d.required_source_types), d.reward_amount, d.currency,
      d.deadline, d.difficulty, d.category, req.userId]);
 
-  // escrow-style ledger entry for the creator's funding (display/index state)
-  await db.query(`INSERT INTO rewards(mission_id, claim_id, amount, currency, status, settlement_status, recipient_id)
-                  VALUES ($1, NULL, $2, $3, 'FUNDED', 'OFF_CHAIN_LEDGER', $4)`,
+  // escrow ledger entry — funder stake is recorded against the creator
+  await db.query(`INSERT INTO rewards(mission_id, claim_id, amount, currency, status, settlement_status, kind, funder_id)
+                  VALUES ($1, NULL, $2, $3, 'FUNDED', 'OFF_CHAIN_LEDGER', 'MISSION', $4)`,
     [rows[0].id, d.reward_amount, d.currency, req.userId]);
+  if (escrowRequired()) {
+    await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros - $1 WHERE user_id=$2`,
+                   [d.reward_amount, req.userId]);
+  }
 
   const claimRows = await db.query(
     `INSERT INTO claims(statement, created_by, status, verification_rules, required_source_types,
@@ -184,16 +247,24 @@ async function handleCreateSubmission(req, res) {
   if (mission.status !== 'OPEN' || !['OPEN','CHALLENGED'].includes(mission.cstatus))
     return res.status(409).json({ error: `mission not accepting submissions (mission=${mission.status}, claim=${mission.cstatus})` });
   if (new Date(mission.deadline) < new Date()) return res.status(409).json({ error: 'deadline passed' });
+  // CRITICAL anti-collusion rule: creators can never win their own mission.
+  if (String(mission.creator) === String(req.userId)) {
+    return res.status(403).json({ error: 'creators cannot submit evidence on their own missions' });
+  }
+  mission.creator = mission.creator;
 
   const p = submissionCreate.safeParse(req.body);
   if (!p.success) return badRequest(res, p);
 
-  // duplicate detection: same submitter, same primary URL on same claim
+  // duplicate detection on NORMALIZED urls (defeats ?utm=... / fragment / case evasion)
+  const { rows: priorUrls } = await db.query(
+    `SELECT e.url FROM evidence e JOIN submissions s ON s.id=e.submission_id
+     WHERE s.claim_id=$1 AND s.submitter_id=$2`, [mission.claim_id, req.userId]);
+  const priorNorms = new Set(priorUrls.map(r => normalizeUrl(r.url)));
   for (const ev of p.data.evidence) {
-    const dup = await db.query(
-      `SELECT 1 FROM evidence e JOIN submissions s ON s.id=e.submission_id
-       WHERE e.url=$1 AND s.claim_id=$2 AND s.submitter_id=$3`, [ev.url, mission.claim_id, req.userId]);
-    if (dup.rowCount) return res.status(409).json({ error: `duplicate evidence url already submitted by you on this claim: ${ev.url}` });
+    if (priorNorms.has(normalizeUrl(ev.url))) {
+      return res.status(409).json({ error: `duplicate evidence url already submitted by you on this claim: ${ev.url}` });
+    }
   }
 
   const isAgent = req.agent === true; // agents identified by user_type at token issue time
@@ -258,6 +329,12 @@ app.post('/api/evidence', requireAuth, wrap(async (req, res) => {
 
 // ============================ ADJUDICATION PIPELINE ============================
 async function processSubmission(submissionId) {
+  // Idempotency gate: claim the work atomically so retries (serverless, manual)
+  // can never double-adjudicate or double-pay.
+  const claimed = await db.query(
+    `UPDATE submissions SET status='ADJUDICATING' WHERE id=$1 AND status='PENDING_ADJUDICATION' RETURNING id`,
+    [submissionId]);
+  if (!claimed.rowCount) return { verdict: null, skipped: true };
   const sub = (await db.query(`SELECT s.*, c.statement, c.verification_rules, c.deadline
                               FROM submissions s JOIN claims c ON c.id=s.claim_id WHERE s.id=$1`, [submissionId])).rows[0];
   if (!sub) throw new Error('submission vanished');
@@ -354,14 +431,50 @@ async function settleOutcome({ submissionId, claimId, missionId, submitterId, ve
     await db.query(`UPDATE reputation SET current_streak = 0 WHERE user_id=$1`, [submitterId]);
   }
 
-  // ---- reward release (ledger; settlement adapter isolated) ----
+  // ---- reward release: atomic, single-winner, protocol fee applied ----
   if (good && !challengeId) {
+    const bps = feeBps();
+    const rel = await db.query(
+      `UPDATE rewards SET status='RELEASED', recipient_id=$1, settled_at=NOW(),
+          gross_amount=amount,
+          fee_amount=(amount * $2::int / 10000),
+          amount=amount - (amount * $2::int / 10000)
+       WHERE mission_id=$3 AND status='FUNDED'
+       RETURNING amount, fee_amount`, [submitterId, bps, missionId]);
+    if (rel.rowCount) {
+      const { amount, fee_amount } = rel.rows[0];
+      await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros + $1 WHERE user_id=$2`,
+                     [amount, submitterId]);
+      if (Number(fee_amount) > 0) {
+        await db.query(
+          `INSERT INTO protocol_treasury(id, total_fee_micros) VALUES ('00000000-0000-4000-8000-000000000001',$1)
+           ON CONFLICT (id) DO UPDATE SET total_fee_micros = protocol_treasury.total_fee_micros + $1,
+                                         updated_at=NOW()`, [fee_amount]);
+      }
+    }
+    // rel.rowCount === 0 → another concurrent winner already claimed the pool.
+    // The unique partial index guarantees this can never double-pay.
+  }
+}
+
+// Resolve a challenge's bond: refund on upheld challenge, forfeit+split otherwise.
+async function resolveBond(challengeId, upheld, originalSubmitterId) {
+  const ch = (await db.query(`SELECT * FROM challenges WHERE id=$1`, [challengeId])).rows[0];
+  if (!ch || !ch.bond_amount || ch.bond_status !== 'ESCROWED') return;
+  if (upheld) {
+    await db.query(`UPDATE challenges SET bond_status='REFUNDED' WHERE id=$1`, [challengeId]);
+    await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros + $1 WHERE user_id=$2`,
+                   [ch.bond_amount, ch.challenger]);
+  } else {
+    const platformShare = Math.floor(ch.bond_amount / 2);
+    const defenderShare = ch.bond_amount - platformShare;
+    await db.query(`UPDATE challenges SET bond_status='FORFEITED' WHERE id=$1`, [challengeId]);
     await db.query(
-      `UPDATE rewards SET status='RELEASED', recipient_id=$1, settled_at=NOW()
-       WHERE mission_id=$2 AND status='FUNDED'`, [submitterId, missionId]);
-    const amt = (await db.query(`SELECT amount FROM rewards WHERE mission_id=$1 AND status='RELEASED'`, [missionId])).rows[0];
-    if (amt) await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros + $1 WHERE user_id=$2`,
-                            [amt.amount, submitterId]);
+      `INSERT INTO protocol_treasury(id, total_forfeited_micros) VALUES ('00000000-0000-4000-8000-000000000001',$1)
+       ON CONFLICT (id) DO UPDATE SET total_forfeited_micros = protocol_treasury.total_forfeited_micros + $1,
+                                     updated_at=NOW()`, [platformShare]);
+    await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros + $1 WHERE user_id=$2`,
+                   [defenderShare, originalSubmitterId]);
   }
 }
 
@@ -401,29 +514,57 @@ function safeJson(s) { try { return typeof s === 'string' ? JSON.parse(s) : s; }
 app.post('/api/claims/:id/challenge', requireAuth, wrap(async (req, res) => {
   const claim = (await db.query(`SELECT * FROM claims WHERE id=$1`, [req.params.id])).rows[0];
   if (!claim) return res.status(404).json({ error: 'claim not found' });
-  if (claim.status !== 'VERIFIED') return res.status(409).json({ error: `only VERIFIED claims can be challenged (current: ${claim.status})` });
+  // Atomic transition — concurrent challengers race safely.
+  const grabbed = await db.query(
+    `UPDATE claims SET status='CHALLENGED', updated_at=NOW() WHERE id=$1 AND status='VERIFIED' RETURNING id`,
+    [claim.id]);
+  if (!grabbed.rowCount) {
+    const cur = (await db.query(`SELECT status FROM claims WHERE id=$1`, [claim.id])).rows[0];
+    return res.status(409).json({ error: `only VERIFIED claims can be challenged (current: ${cur?.status || 'gone'})` });
+  }
+  // No challenging your own verified record (self-dealing for challenge stats).
+  // The record-holder is whoever's ORIGINAL (non-challenge) submission is verified.
+  const lastWinner = (await db.query(
+    `SELECT s.submitter_id FROM submissions s
+     WHERE s.claim_id=$1 AND s.adjudication_id IS NOT NULL AND s.challenge_id IS NULL
+     ORDER BY s.created_at ASC LIMIT 1`, [claim.id])).rows[0];
+  if (lastWinner && String(lastWinner.submitter_id) === String(req.userId)) {
+    await db.query(`UPDATE claims SET status='VERIFIED' WHERE id=$1`, [claim.id]);
+    return res.status(403).json({ error: 'you cannot challenge a record you authored' });
+  }
+  const bond = bondGen();
+  if (bond > 0) {
+    const avail = await availableEarned(req.userId);
+    if (avail < bond) {
+      await db.query(`UPDATE claims SET status='VERIFIED' WHERE id=$1`, [claim.id]);
+      return res.status(402).json({ error: `challenge requires a ${bond} GEN bond`, available: avail });
+    }
+  }
   const cooldown = await db.query(
     `SELECT 1 FROM challenges WHERE claim_id=$1 AND created_at > now() - interval '24 hours'`, [claim.id]);
-  if (cooldown.rowCount) return res.status(429).json({ error: 'this claim was challenged within the last 24h; cooldown active' });
-  const rep = await getReputation(req.userId);
-  if ((await db.query(`SELECT count(*)::int n FROM submissions WHERE submitter_id=$1`, [req.userId])).rows[0].n === 0 && claim.created_by !== req.userId)
-    ; // newcomers may challenge — allowed intentionally
+  if (cooldown.rowCount) {
+    await db.query(`UPDATE claims SET status='VERIFIED' WHERE id=$1`, [claim.id]);
+    return res.status(429).json({ error: 'this claim was challenged within the last 24h; cooldown active' });
+  }
 
   const p = challengeCreate.safeParse(req.body);
   if (!p.success) return badRequest(res, p);
 
   const ch = (await db.query(
-    `INSERT INTO challenges(claim_id, challenger, reason, status) VALUES ($1,$2,$3,'RE_ADJUDICATING') RETURNING id`,
-    [claim.id, req.userId, p.data.reason])).rows[0];
-
-  await db.query(`UPDATE claims SET status='CHALLENGED', updated_at=NOW() WHERE id=$1`, [claim.id]);
+    `INSERT INTO challenges(claim_id, challenger, reason, status, bond_amount, bond_status)
+     VALUES ($1,$2,$3,'RE_ADJUDICATING',$4,$5) RETURNING id`,
+    [claim.id, req.userId, p.data.reason, bond, bond > 0 ? 'ESCROWED' : 'NONE'])).rows[0];
+  if (bond > 0) {
+    await db.query(`UPDATE reputation SET total_earned_micros = total_earned_micros - $1 WHERE user_id=$2`,
+                   [bond, req.userId]);
+  }
   await db.query(`INSERT INTO claim_versions(claim_id, version, status, verdict, note)
                   VALUES ($1,$2,'CHALLENGED',$3,$4)`,
     [claim.id, claim.version + 1, claim.current_verdict, `challenge ${ch.id}: ${p.data.reason.slice(0,200)}`]);
 
   const sub = (await db.query(
     `INSERT INTO submissions(mission_id, claim_id, submitter_id, reasoning, status, is_agent)
-     VALUES ($1,$2,$3,$4,'ADJUDICATING',$5) RETURNING id`,
+     VALUES ($1,$2,$3,$4,'PENDING_ADJUDICATION',$5) RETURNING id`,
     [claim.mission_id, claim.id, req.userId, `[challenge ${ch.id}] ` + p.data.reasoning,
      req.agent === true])).rows[0];
   await db.query(`UPDATE challenges SET new_submission_id=$1 WHERE id=$2`, [sub.id, ch.id]);
@@ -454,9 +595,15 @@ async function processChallenge(challengeId, submissionId) {
   // For MVP semantics: SUPPORTED challenge ⇒ claim flips to the challenger's evidence and prior version marked SUPERSEDED.
 
   // Final claim state (status + standing verdict) is owned by settleOutcome;
-  // here we only close out the challenge record itself.
+  // here we close out the challenge and settle its bond.
   await db.query(`UPDATE challenges SET status='RESOLVED', re_adjudicated_at=NOW(), new_verdict=$1 WHERE id=$2`,
     [out.verdict, challengeId]);
+  const upheld = out.verdict === 'SUPPORTED';
+  const originalSubmitter = (await db.query(
+    `SELECT s.submitter_id FROM submissions s
+      WHERE s.claim_id=$1 AND s.adjudication_id IS NOT NULL AND (s.challenge_id IS NULL OR s.challenge_id <> $2)
+      ORDER BY s.created_at ASC LIMIT 1`, [claim.id, challengeId])).rows[0]?.submitter_id ?? null;
+  await resolveBond(challengeId, upheld, originalSubmitter);
 }
 
 app.get('/api/challenges/claim/:claimId', wrap(async (req, res) => {
@@ -523,6 +670,11 @@ app.get('/api/leaderboard', wrap(async (req, res) => {
     `SELECT u.id, u.username, u.user_type, r.successful_challenges FROM reputation r
      JOIN users u ON u.id=r.user_id ORDER BY r.successful_challenges DESC LIMIT 25`);
   res.json({ top_earners: earn.rows, highest_accuracy: acc.rows, most_verified: ver.rows, most_successful_challenges: cha.rows });
+}));
+
+app.get('/api/treasury', wrap(async (_req, res) => {
+  const { rows } = await db.query('SELECT total_fee_micros, total_forfeited_micros FROM protocol_treasury LIMIT 1');
+  res.json(rows[0] || { total_fee_micros: 0, total_forfeited_micros: 0 });
 }));
 
 // ============================ MISC ============================

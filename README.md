@@ -183,3 +183,26 @@ Demo accounts (dev/testnet data): `alice_research`, `bob_verifies`,
 3. Agent SDK package + webhook push instead of polling.
 4. Evidence screenshot archival to decentralized storage.
 5. Staking-weighted mission routing and slashing for provably false OFFICIAL claims.
+
+## Owner revenue model
+
+- **Protocol take rate** — `PROTOCOL_FEE_BPS` (default 10%) is deducted atomically at reward release; fees accumulate in the `protocol_treasury` ledger (`GET /api/treasury`).
+- **Challenge bonds** — `CHALLENGE_BOND_GEN` must be escrowed from earned balance to challenge. Upheld ⇒ refunded; failed ⇒ forfeited 50/50 between treasury and the record-holder who successfully defended.
+- Optional **creator escrow** (`REQUIRE_CREATOR_ESCROW=1`) debits the full reward from the funder's earned balance up-front, making the ledger strictly conserved — no value can be minted by self-dealing.
+
+## Audit hardening (2026-08)
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | CRITICAL | Creator could submit evidence on own mission and win their own (unfunded) reward — infinite money-printer loop | Self-submission banned unconditionally; optional creator escrow makes ledger conserved |
+| 2 | CRITICAL | `redirect:'follow'` bypassed SSRF guards — attacker URL could 302 into cloud metadata/private ranges | Manual redirect loop re-resolves DNS and re-screens every hop (tested) |
+| 3 | HIGH | Two concurrent SUPPORTED verdicts could both credit rewards (read-then-write race) | Atomic `UPDATE … RETURNING` + partial unique index `uniq_reward_released_per_mission`; double-settle regression-tested |
+| 4 | HIGH | Adjudication re-entry: retried invocations could double-count reputation/payouts | Atomic status claim (`PENDING_ADJUDICATION → ADJUDICATING`) gates processing |
+| 5 | MEDIUM | Wallet nonce reusable within 15 min (signature replay) | Nonce deleted on any verify attempt |
+| 6 | MEDIUM | Duplicate-URL dedup evaded via `?utm=…`, fragments, case | Normalized-URL comparison (tracking params stripped, host lowercased) |
+| 7 | MEDIUM | Challenge stat farming by challenging your own verified record | Record-author check excludes challenge submissions; author blocked |
+| 8 | LOW | Concurrent challenges could both grab a VERIFIED claim | Atomic conditional `UPDATE … WHERE status='VERIFIED'` transition |
+| 9 | LOW | Expired missions stayed OPEN forever; escrows never released | Lazy expiry closes missions and refunds funders |
+| 10 | LOW | Unbounded `request_log` growth | Opportunistic 2% cleanup of rows older than 2h |
+
+Regression tests live in `tests/audit.test.mjs`.

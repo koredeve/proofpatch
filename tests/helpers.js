@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 process.env.DATABASE_URL = 'postgresql://mac@localhost:5432/proofpatch_test';
 process.env.JWT_SECRET = 'test-secret';
+process.env.RATE_LIMIT_PER_10MIN = '100000'; // abuse-limiting covered by cooldown/dedup assertions
 process.env.PORT = process.env.TEST_PORT || '3999';
 delete process.env.GENLAYER_RPC_URL;
 

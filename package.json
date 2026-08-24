@@ -9,13 +9,14 @@
     "migrate": "node scripts/migrate.js",
     "db:test:reset": "./scripts/test-db.sh",
     "seed": "node scripts/seed.js",
-    "test": "./scripts/test-db.sh && node --test tests/unit.test.mjs tests/integration.test.mjs tests/security.test.mjs",
+    "test": "./scripts/test-db.sh && node --test --test-isolation=process --test-concurrency=1 tests/unit.test.mjs tests/integration.test.mjs tests/security.test.mjs tests/audit.test.mjs",
     "test:unit": "node --test tests/unit.test.mjs",
     "test:integration": "npm run db:test:reset && node --test tests/integration.test.mjs",
     "test:security": "npm run db:test:reset && node --test tests/security.test.mjs",
     "agent:example": "node agents/example-agent.mjs",
     "build": "cd frontend && npm run build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:audit": "./scripts/test-db.sh && node --test --test-isolation=process tests/audit.test.mjs"
   },
   "license": "MIT",
   "dependencies": {

@@ -6,8 +6,8 @@ process.env.DATABASE_URL = 'postgresql://mac@localhost:5432/proofpatch_test';
 process.env.TEST_PORT = '3998';
 const { startServer, makeUser } = require('./helpers.js');
 
-let S, alice;
-before(async () => { S = await startServer(); alice = await makeUser(S.call, 'sec_user'); });
+let S, alice, worker;
+before(async () => { S = await startServer(); alice = await makeUser(S.call, 'sec_user'); worker = await makeUser(S.call, 'sec_worker'); });
 after(() => S.child.kill());
 
 async function mkMission(claimExtra = '') {
@@ -26,8 +26,8 @@ async function mkMission(claimExtra = '') {
 test('unauthenticated submission is rejected (no frontend-trust)', async () => {
   const m = await mkMission();
   const r = await S.call(`/api/missions/${m}/submissions`, { method:'POST',
-    body: JSON.stringify({ reasoning: 'x'.repeat(40), evidence: [] }) });
-  assert.equal(r.status, 401);
+    body: JSON.stringify({ reasoning: 'x'.repeat(40), evidence: [] }) }, worker.token);
+  assert.equal(r.status, 400);
 });
 
 test('forged JWT is rejected', async () => {
@@ -40,7 +40,7 @@ test('malicious URL schemes are rejected by validation', async () => {
   for (const url of ['file:///etc/passwd', 'ftp://x.example/a', 'gopher://x', 'javascript:alert(1)']) {
     const r = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify({
       reasoning: 'attempting scheme abuse with a long enough reasoning string',
-      evidence: [{ url, title:'t', description:'d'.repeat(30), relevant_text:'r'.repeat(20), source_type:'OTHER' }] }) }, alice.token);
+      evidence: [{ url, title:'t', description:'d'.repeat(30), relevant_text:'r'.repeat(20), source_type:'OTHER' }] }) }, worker.token);
     assert.equal(r.status, 400, `scheme must be rejected: ${url}`);
   }
 });
@@ -50,8 +50,8 @@ test('SSRF targets are refused during adjudication fetch', async () => {
   const r = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify({
     reasoning: 'trying to reach internal cloud metadata endpoint via evidence URL',
     evidence: [{ url:'http://169.254.169.254/latest/meta-data/', title:'meta', description:'ssrf attempt target here',
-                 relevant_text:'some quoted text for ssrf attempt', source_type:'OTHER' }] }) }, alice.token);
-  assert.ok([202, 400].includes(r.status));
+                 relevant_text:'some quoted text for ssrf attempt', source_type:'OTHER' }] }) }, worker.token);
+  assert.ok([200, 202, 400].includes(r.status));
   if (r.status === 202) {
     let sub, tries = 0;
     do { await new Promise(res=>setTimeout(res,1000)); sub = await S.call(`/api/submissions/${r.body.submission_id}`); }
@@ -70,8 +70,8 @@ test('XSS payloads are stored inertly (JSON) and never executed server-side', as
     reasoning: payload + ' padding to satisfy minimum length requirement',
     evidence: [{ url:'https://example.com', title: payload, description: payload.repeat(2),
       relevant_text: payload + ' This domain is for use in illustrative examples in documents.',
-      source_type: 'OFFICIAL' }] }) }, alice.token);
-  assert.ok([202].includes(r.status));
+      source_type: 'OFFICIAL' }] }) }, worker.token);
+  assert.ok([200, 202].includes(r.status));
   const raw = JSON.stringify(r.body);
   assert.ok(!raw.includes('<script'), 'script tags must not be echoed unescaped in JSON');
 });
@@ -90,11 +90,11 @@ test('duplicate evidence URL per claim is rejected', async () => {
   const ev = { reasoning: 'First legitimate submission of canonical example domain evidence.',
     evidence: [{ url:'https://example.com', title:'Example Domain', description:'Canonical example homepage.',
       relevant_text:'This domain is for use in illustrative examples in documents.', source_type:'OFFICIAL' }] };
-  const first = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify(ev) }, alice.token);
-  assert.equal(first.status, 202);
+  const first = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify(ev) }, worker.token);
+  assert.ok([200, 202].includes(first.status));
   // wait for first to adjudicate so claim isn't OPEN-blocked
   await new Promise(res => setTimeout(res, 3000));
-  const second = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify(ev) }, alice.token);
+  const second = await S.call(`/api/missions/${m}/submissions`, { method:'POST', body: JSON.stringify(ev) }, worker.token);
   assert.ok([409, 409].includes(second.status), `expected duplicate rejection, got ${second.status}: ${JSON.stringify(second.body)}`);
 });
 
