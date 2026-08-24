@@ -67,8 +67,7 @@ test('prompt preamble contains injection defense', async () => {
 // ---------- wallet signature round-trip ----------
 test('wallet signature verifies with matching key and rejects wrong key', async () => {
   const { generatePrivateKey, privateKeyToAccount } = await import('viem/accounts');
-  const priv = generatePrivateKey();
-  const account = privateKeyToAccount(priv);
+  const account = privateKeyToAccount(generatePrivateKey());
   const nonce = 'cafebabe';
   const msg = `ProofPatch login\nnonce:${nonce}`;
   const sig = await account.signMessage({ message: msg });
