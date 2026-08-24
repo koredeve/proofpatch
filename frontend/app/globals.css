@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0b0d12;
+  --color-panel: #12151c;
+  --color-edge: #232833;
+  --color-fog: #9aa3b2;
+  --color-paper: #e8ebf0;
+  --color-signal: #6ee7a0;
+  --color-danger: #f87171;
+  --color-warn: #fbbf24;
+  --color-accent: #7dd3fc;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html { background: var(--color-ink); color: var(--color-paper); }
+body { font-family: var(--font-display); -webkit-font-smoothing: antialiased; }
+::selection { background: #7dd3fc33; }
+
+.card { @apply bg-[#12151c] border border-[#232833] rounded-xl; }
+.btn-primary { @apply inline-flex items-center gap-2 rounded-lg bg-[#7dd3fc] text-[#0b0d12] font-semibold px-5 py-2.5 hover:bg-white transition-colors; }
+.btn-secondary { @apply inline-flex items-center gap-2 rounded-lg border border-[#232833] text-[#e8ebf0] px-5 py-2.5 hover:border-[#7dd3fc] hover:text-[#7dd3fc] transition-colors; }
+.input { @apply w-full bg-[#0b0d12] border border-[#232833] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#7dd3fc] placeholder:text-[#566071]; }
+.label { @apply block text-xs uppercase tracking-wider text-[#9aa3b2] mb-1.5 font-medium; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none;} }
+.fade-up { animation: fadeUp .45s ease both; }
