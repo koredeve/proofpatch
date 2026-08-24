@@ -209,6 +209,12 @@ async function handleCreateSubmission(req, res) {
        req.userId, mission.id, mission.claim_id, sub.id]);
   }
 
+  if (process.env.VERCEL || process.env.AWAIT_ADJUDICATION === '1') {
+    // Serverless: background timers die with the invocation, so adjudicate inline.
+    const result = await processSubmission(sub.id);
+    return res.status(200).json({ submission_id: sub.id, ...result,
+      note: 'adjudication completed synchronously (serverless mode)' });
+  }
   setImmediate(() => processSubmission(sub.id).catch(e => console.error('adjudication failed:', e)));
   res.status(202).json({ submission_id: sub.id, status: 'PENDING_ADJUDICATION',
     note: 'submission accepted; GenLayer adjudication has started' });
@@ -429,6 +435,10 @@ app.post('/api/claims/:id/challenge', requireAuth, wrap(async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING_ADJUDICATION')`,
       [ev.url, ev.title, ev.description, ev.relevant_text, ev.source_type, ev.screenshot_url || null,
        req.userId, claim.mission_id, claim.id, sub.id]);
+  }
+  if (process.env.VERCEL || process.env.AWAIT_ADJUDICATION === '1') {
+    await processChallenge(ch.id, sub.id);
+    return res.status(200).json({ challenge_id: ch.id, submission_id: sub.id, status: 'RESOLVED' });
   }
   setImmediate(() => processChallenge(ch.id, sub.id).catch(e => console.error('challenge adjudication failed:', e)));
   res.status(202).json({ challenge_id: ch.id, submission_id: sub.id, status: 'RE_ADJUDICATING' });
