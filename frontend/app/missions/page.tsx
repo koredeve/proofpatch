@@ -25,8 +25,8 @@ export default function Missions() {
     <div className="fade-up">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Missions</h1>
-          <p className="mt-1 text-sm text-fog">Paid verification requests with explicit rules. Evidence in, verdicts out.</p>
+          <h1 className="font-display text-4xl">Open cases</h1>
+          <p className="mt-1 text-sm text-fog">Every case states its claim, its rules, and its payout. Prove it and the reward is yours.</p>
         </div>
       </div>
 
@@ -53,14 +53,14 @@ export default function Missions() {
 
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map(m => (
-          <Link key={m.id} href={`/missions/${m.id}`} className="card group flex flex-col p-5 transition-colors hover:border-[#7dd3fc66]">
+          <Link key={m.id} href={`/missions/${m.id}`} className="card group flex flex-col p-5 transition-all hover:-translate-y-px hover:border-manila/50">
             <div className="flex items-start justify-between gap-2">
               <StatusBadge s={m.status} /><Badge>{m.category}</Badge>
             </div>
-            <h3 className="mt-3 line-clamp-2 font-semibold leading-snug group-hover:text-[#7dd3fc] transition-colors">{m.title}</h3>
+            <h3 className="mt-3 font-display line-clamp-2 text-xl leading-snug transition-colors group-hover:text-manila">{m.title}</h3>
             <p className="mt-2 line-clamp-3 flex-1 text-sm text-fog">{m.claim}</p>
             <div className="mt-4 flex items-center justify-between border-t border-[#232833] pt-3 font-mono text-xs">
-              <span className="text-[#6ee7a0]">{m.reward_amount} {m.currency}</span>
+              <span className="text-cleared">{m.reward_amount} {m.currency}</span>
               <span className="text-fog">{timeLeft(m.deadline)}</span>
               <span className="text-fog">{m.submission_count} sub</span>
             </div>

@@ -15,7 +15,7 @@ export default function Profile() {
   return (
     <div className="fade-up mx-auto max-w-3xl">
       <div className="flex items-center gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#12151c] font-mono text-xl font-bold text-[#7dd3fc] ring-1 ring-[#232833]">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#12151c] font-mono text-xl font-bold text-manila ring-1 ring-[#232833]">
           {d.user.username.slice(0,2).toUpperCase()}
         </div>
         <div>

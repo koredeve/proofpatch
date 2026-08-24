@@ -58,7 +58,7 @@ export default function CreateMission() {
 
       <ol className="mt-8 flex gap-2">
         {STEPS.map((s,i)=>(
-          <li key={s} className={`flex-1 rounded-lg border px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wide transition-colors ${i===step?"border-[#7dd3fc] text-[#7dd3fc]":i<step?"border-[#6ee7a044] text-[#6ee7a0]/70":"border-[#232833] text-fog"}`}>
+          <li key={s} className={`flex-1 rounded-lg border px-2 py-2 text-center font-mono text-[10px] uppercase tracking-wide transition-colors ${i===step?"border-manila text-manila":i<step?"border-cleared/40 text-cleared/70":"border-[#232833] text-fog"}`}>
             {i+1}. {s}
           </li>
         ))}
@@ -71,9 +71,9 @@ export default function CreateMission() {
             <textarea className="input min-h-24" value={f.claim} onChange={e=>{set("claim",e.target.value); checkQuality(e.target.value);}}
               placeholder={'Good: "Does Tesla currently list Model Y as an available vehicle?"'} /></div>
           {warnings.length>0 && (
-            <div className="rounded-lg border border-[#fbbf2440] bg-[#fbbf240d] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#fbbf24]">Claim quality warnings</p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-[#fbbf24]/90">{warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>
+            <div className="rounded-lg border border-manila/25 bg-manila/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-manila">Claim quality warnings</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-manila/90">{warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>
             </div>)}
           <div><label className="label">Description *</label><textarea className="input min-h-24" value={f.description} onChange={e=>set("description",e.target.value)} placeholder="Context a researcher needs." /></div>
         </>}
@@ -85,7 +85,7 @@ export default function CreateMission() {
           <div><p className="label">Required source types</p><div className="flex flex-wrap gap-2">
             {["PRIMARY","SECONDARY","OFFICIAL","PUBLIC_RECORD","NEWS","DOCUMENTATION","OTHER"].map(t=>(
               <button key={t} type="button" onClick={()=>set("required_source_types", f.required_source_types.includes(t)?f.required_source_types.filter(x=>x!==t):[...f.required_source_types,t])}
-                className={`rounded-md border px-2.5 py-1 font-mono text-xs transition-colors ${f.required_source_types.includes(t)?"border-[#7dd3fc] text-[#7dd3fc]":"border-[#232833] text-fog hover:border-fog"}`}>{t}</button>))}
+                className={`rounded-md border px-2.5 py-1 font-mono text-xs transition-colors ${f.required_source_types.includes(t)?"border-manila text-manila":"border-[#232833] text-fog hover:border-fog"}`}>{t}</button>))}
           </div></div>
         </>}
         {step===3 && <div className="grid grid-cols-2 gap-4">
@@ -102,7 +102,7 @@ export default function CreateMission() {
         </dl>}
       </div>
 
-      {error && <p className="mt-4 rounded-lg border border-[#f8717140] bg-[#f871710d] px-4 py-3 text-sm text-[#f87171]">{error}</p>}
+      {error && <p className="mt-4 rounded-lg border border-stamp40] bg-stamp/5 px-4 py-3 text-sm text-stamp">{error}</p>}
 
       <div className="mt-6 flex justify-between">
         <button onClick={()=>setStep(s=>Math.max(0,s-1))} disabled={step===0} className="btn-secondary disabled:opacity-30">Back</button>

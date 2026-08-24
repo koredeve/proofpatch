@@ -11,24 +11,24 @@ export default function AdjudicationPage() {
   const [a, setA] = useState<any>(null);
   const [err, setErr] = useState("");
   useEffect(() => { api(`/api/adjudications/${id}`).then(setA).catch(e=>setErr(e.message)); }, [id]);
-  if (err) return <p className="mt-20 text-center text-[#f87171]">{err}</p>;
+  if (err) return <p className="mt-20 text-center text-stamp">{err}</p>;
   if (!a) return <p className="mt-20 animate-pulse text-center font-mono text-sm text-fog">loading adjudication…</p>;
 
   return (
     <div className="fade-up mx-auto max-w-3xl">
-      <p className="font-mono text-xs uppercase tracking-[0.25em] text-[#7dd3fc]">GenLayer adjudication</p>
+      <p className="font-mono text-xs uppercase tracking-[0.25em] text-manila">GenLayer adjudication</p>
       <div className="mt-3 flex flex-wrap items-center gap-4">
         <h1 className="text-3xl font-bold"><VerdictBadge v={a.verdict} /></h1>
         <Badge>{a.provider === "genlayer" ? "GENLAYER CONSENSUS" : "LOCAL SIMULATION"}</Badge>
         <span className="font-mono text-xs text-fog">{fmtDateTime(a.timestamp)}</span>
       </div>
 
-      <SimulatedNote provider={a.provider} txHash={a.transaction_hash} />
+      <SimulatedNote provider={a.provider} />
 
       <section className="card mt-6 p-6">
         <p className="label">Claim</p>
-        <blockquote className="border-l-2 border-[#7dd3fc] pl-4 text-lg font-medium leading-relaxed">“{a.claim_statement}”</blockquote>
-        <Link href={`/missions/${a.mission_id}`} className="mt-2 inline-block text-xs text-fog hover:text-[#7dd3fc]">mission: {a.mission_title} →</Link>
+        <blockquote className="border-l-2 border-manila pl-4 text-lg font-medium leading-relaxed">“{a.claim_statement}”</blockquote>
+        <Link href={`/missions/${a.mission_id}`} className="mt-2 inline-block text-xs text-fog hover:text-manila">mission: {a.mission_title} →</Link>
       </section>
 
       {a.submission && (
@@ -37,7 +37,7 @@ export default function AdjudicationPage() {
           {(a.submission.evidence||[]).filter(Boolean).map((e:any,i:number)=>(
             <div key={i} className="mb-4 rounded-lg border border-[#232833] p-4 last:mb-0">
               <div className="flex justify-between gap-2">
-                <a href={e.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate text-sm font-medium text-[#7dd3fc] hover:underline">{e.title}</a>
+                <a href={e.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate text-sm font-medium text-manila hover:underline">{e.title}</a>
                 <Badge>{e.source_type}</Badge>
               </div>
               <p className="mt-2 font-mono text-xs leading-relaxed text-paper/80">{e.relevant_text}</p>
@@ -45,7 +45,7 @@ export default function AdjudicationPage() {
           ))}
           <p className="label mt-4">Researcher reasoning</p>
           <p className="text-sm leading-relaxed text-fog">{a.submission.reasoning}</p>
-          <p className="mt-2 text-xs text-fog">by <Link href={`/profile/${a.submission.submitter}`} className="text-[#7dd3fc] hover:underline">{a.submission.submitter}</Link></p>
+          <p className="mt-2 text-xs text-fog">by <Link href={`/profile/${a.submission.submitter}`} className="text-manila hover:underline">{a.submission.submitter}</Link></p>
         </section>
       )}
 

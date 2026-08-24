@@ -1,50 +1,55 @@
 "use client";
 import Link from "next/link";
 
-const verdictStyle: Record<string, string> = {
-  SUPPORTED: "bg-[#6ee7a01a] text-[#6ee7a0] border-[#6ee7a033]",
-  REJECTED: "bg-[#f871711a] text-[#f87171] border-[#f8717133]",
-  INSUFFICIENT_EVIDENCE: "bg-[#fbbf241a] text-[#fbbf24] border-[#fbbf2433]",
-  CONFLICTING_EVIDENCE: "bg-[#fb923c1a] text-[#fb923c] border-[#fb923c33]",
-  PENDING: "bg-white/5 text-fog border-edge",
-};
-
-export function VerdictBadge({ v }: { v?: string | null }) {
-  if (!v || v === "PENDING") return <Badge>PENDING</Badge>;
+/** Signature element: the verdict stamp. */
+export function VerdictBadge({ v, animated = false }: { v?: string | null; animated?: boolean }) {
+  if (!v || v === "PENDING") return <span className="rounded border border-edge bg-white/5 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-fog">pending</span>;
+  const cls = { SUPPORTED: "stamp-supported", REJECTED: "stamp-rejected",
+    INSUFFICIENT_EVIDENCE: "stamp-insufficient", CONFLICTING_EVIDENCE: "stamp-conflicting" }[v as string] || "stamp-insufficient";
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-mono font-semibold tracking-wide ${verdictStyle[v] || ""}`}>
+    <span className={`stamp ${cls} ${animated ? "stamp-animated" : ""}`}>
       {v.replace(/_/g, " ")}
     </span>
   );
 }
 
 export function StatusBadge({ s }: { s: string }) {
-  const map: Record<string,string> = { OPEN:"text-[#7dd3fc] border-[#7dd3fc33] bg-[#7dd3fc14]", VERIFIED:"text-[#6ee7a0] border-[#6ee7a033] bg-[#6ee7a01a]", CHALLENGED:"text-[#fbbf24] border-[#fbbf2433] bg-[#fbbf2414]", RESOLVED:"text-fog border-edge bg-white/5" };
-  return <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${map[s]||"text-fog border-edge"}`}>{s}</span>;
+  const map: Record<string,string> = {
+    OPEN: "text-manila border-manila/40",
+    VERIFIED: "text-cleared border-cleared/40",
+    CHALLENGED: "text-stamp border-stamp/40",
+    RESOLVED: "text-fog border-edge",
+    SUBMISSIONS_CLOSED: "text-fog border-edge",
+  };
+  return <span className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] ${map[s]||"text-fog border-edge"}`}>{s.replace(/_/g," ")}</span>;
 }
 
 export function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md border border-[#232833] bg-white/5 px-2 py-0.5 text-xs font-mono text-[#9aa3b2]">{children}</span>;
+  return <span className="rounded border border-edge px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-fog">{children}</span>;
 }
 
-export function SimulatedNote({ provider, txHash }: { provider: string; txHash?: string | null }) {
+export function ExhibitTag({ id }: { id: string }) {
+  return <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fog">Exhibit {id.slice(0, 8)}</span>;
+}
+
+export function SimulatedNote({ provider }: { provider: string }) {
   if (provider === "genlayer") return null;
   return (
-    <div className="rounded-lg border border-[#fbbf2433] bg-[#fbbf240d] px-4 py-3 text-sm text-[#fbbf24]">
-      SIMULATED RESULT — produced by the local development evaluator. Not GenLayer consensus; no transaction was broadcast.
+    <div className="rounded-md border border-manila/30 bg-manila/5 px-4 py-3 text-sm text-manila">
+      Simulated result — produced by the local development evaluator. Not GenLayer consensus; no transaction was broadcast.
     </div>
   );
 }
 
 export function Timeline({ steps }: { steps: { label: string; at?: string | Date | null; done: boolean }[] }) {
   return (
-    <ol className="relative ml-3 space-y-6 border-l border-[#232833] pl-6">
+    <ol className="relative ml-3 space-y-6 border-l border-edge pl-6">
       {steps.map((s, i) => (
         <li key={i} className="relative">
-          <span className={`absolute -left-[31px] top-0.5 h-4 w-4 rounded-full border-2 ${s.done ? "border-[#7dd3fc] bg-[#7dd3fc]" : "border-[#232833] bg-[#12151c]"}`} />
+          <span className={`absolute -left-[31px] top-0.5 h-4 w-4 rounded-full border-2 ${s.done ? "border-manila bg-manila" : "border-edge bg-folder"}`} />
           <div className="flex flex-wrap items-baseline gap-x-3">
-            <p className={`text-sm font-semibold ${s.done ? "text-paper" : "text-fog"}`}>{s.label}</p>
-            {s.at && <time className="font-mono text-xs text-fog">{new Date(s.at).toLocaleString()}</time>}
+            <p className={`font-mono text-xs font-semibold tracking-wide ${s.done ? "text-paper" : "text-fog"}`}>{s.label}</p>
+            {s.at && <time className="text-xs text-fog">{new Date(s.at).toLocaleString()}</time>}
           </div>
         </li>
       ))}

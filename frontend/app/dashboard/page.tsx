@@ -49,8 +49,8 @@ export default function Dashboard() {
               <div key={rw.id} className="flex items-center justify-between py-3 text-sm">
                 <span className="truncate pr-3 text-fog">{rw.title || rw.mission_id?.slice(0,8)}</span>
                 <span className="flex items-center gap-3 font-mono">
-                  <span className={rw.status==="RELEASED"?"text-[#6ee7a0]":"text-fog"}>{rw.amount} {rw.currency}</span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[10px] ${rw.status==="RELEASED"?"border-[#6ee7a044] text-[#6ee7a0]":"border-edge text-fog"}`}>{rw.status}</span>
+                  <span className={rw.status==="RELEASED"?"text-cleared":"text-fog"}>{rw.amount} {rw.currency}</span>
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] ${rw.status==="RELEASED"?"border-cleared/40 text-cleared":"border-edge text-fog"}`}>{rw.status}</span>
                 </span>
               </div>))}
           </div>
@@ -75,5 +75,5 @@ function Recent({ userId }: { userId: string }) {
     fetch(`${process.env.NEXT_PUBLIC_API_URL||"http://localhost:3001"}/api/users/x`).catch(()=>{});
     // profile endpoint gives activity by username; use me endpoint data instead
   }, []);
-  return <p className="text-sm text-fog">See your full activity on your <Link href="/dashboard" className="text-[#7dd3fc]">profile page</Link>.</p>;
+  return <p className="text-sm text-fog">See your full activity on your <Link href="/dashboard" className="text-manila">profile page</Link>.</p>;
 }

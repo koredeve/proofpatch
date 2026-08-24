@@ -1,28 +1,76 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0b0d12;
-  --color-panel: #12151c;
-  --color-edge: #232833;
-  --color-fog: #9aa3b2;
-  --color-paper: #e8ebf0;
-  --color-signal: #6ee7a0;
-  --color-danger: #f87171;
-  --color-warn: #fbbf24;
-  --color-accent: #7dd3fc;
-  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-vault: #11151c;
+  --color-folder: #1a2029;
+  --color-dossier: #232b36;
+  --color-edge: #2e3745;
+  --color-manila: #e3a857;
+  --color-stamp: #c4534a;
+  --color-cleared: #7fbfa0;
+  --color-ink: #dfe4ee;
+  --color-fog: #8b94a6;
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
-html { background: var(--color-ink); color: var(--color-paper); }
-body { font-family: var(--font-display); -webkit-font-smoothing: antialiased; }
-::selection { background: #7dd3fc33; }
+html { background: var(--color-vault); color: var(--color-ink); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+::selection { background: #e3a85740; }
 
-.card { @apply bg-[#12151c] border border-[#232833] rounded-xl; }
-.btn-primary { @apply inline-flex items-center gap-2 rounded-lg bg-[#7dd3fc] text-[#0b0d12] font-semibold px-5 py-2.5 hover:bg-white transition-colors; }
-.btn-secondary { @apply inline-flex items-center gap-2 rounded-lg border border-[#232833] text-[#e8ebf0] px-5 py-2.5 hover:border-[#7dd3fc] hover:text-[#7dd3fc] transition-colors; }
-.input { @apply w-full bg-[#0b0d12] border border-[#232833] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#7dd3fc] placeholder:text-[#566071]; }
-.label { @apply block text-xs uppercase tracking-wider text-[#9aa3b2] mb-1.5 font-medium; }
+/* --- shared components --- */
+.card { background: var(--color-folder); border: 1px solid var(--color-edge); border-radius: 10px; }
+.btn-primary {
+  @apply inline-flex items-center gap-2 rounded-md px-5 py-2.5 font-semibold transition-colors;
+  background: var(--color-manila); color: #16130b;
+}
+.btn-primary:hover { background: #f0bc74; }
+.btn-secondary {
+  @apply inline-flex items-center gap-2 rounded-md border px-5 py-2.5 transition-colors;
+  border-color: var(--color-edge); color: var(--color-ink);
+}
+.btn-secondary:hover { border-color: var(--color-manila); color: var(--color-manila); }
+.input {
+  @apply w-full rounded-md border bg-black/30 px-3 py-2.5 text-sm outline-none transition-colors;
+  border-color: var(--color-edge);
+}
+.input:focus { border-color: var(--color-manila); }
+.label {
+  @apply mb-1.5 block font-mono text-[11px] uppercase tracking-[0.14em];
+  color: var(--color-fog);
+}
 
-@keyframes fadeUp { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none;} }
-.fade-up { animation: fadeUp .45s ease both; }
+/* --- signature: the verdict stamp --- */
+.stamp {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 0.9rem;
+  font-family: var(--font-mono); font-weight: 700; font-size: 0.72rem;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  transform: rotate(-2deg);
+  border: 2px solid currentColor; border-radius: 3px;
+  box-shadow: inset 0 0 0 1.5px var(--color-folder), inset 0 0 0 2.5px currentColor;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.92 0'/%3E%3C/filter%3E%3Crect width='120' height='40' filter='url(%23n)'/%3E%3C/svg%3E");
+  mask-size: cover;
+}
+.stamp-supported { color: var(--color-cleared); }
+.stamp-rejected { color: var(--color-stamp); }
+.stamp-insufficient { color: var(--color-fog); }
+.stamp-conflicting { color: var(--color-manila); }
+
+/* orchestrated moment: the stamp presses once */
+@keyframes stamp-in {
+  0% { opacity: 0; transform: rotate(-6deg) scale(1.25); }
+  55% { opacity: 1; transform: rotate(-2deg) scale(0.97); }
+  100% { opacity: 1; transform: rotate(-2deg) scale(1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stamp-animated { animation: stamp-in 420ms cubic-bezier(.2,.9,.3,1.2) both; }
+}
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px);} to { opacity: 1; transform: none;} }
+.fade-up { animation: fade-up .5s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .fade-up, .stamp-animated { animation: none; }
+}
+
+:focus-visible { outline: 2px solid var(--color-manila); outline-offset: 2px; }

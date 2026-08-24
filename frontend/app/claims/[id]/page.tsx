@@ -18,7 +18,7 @@ export default function ClaimPage() {
         <h1 className="text-2xl font-bold tracking-tight">Claim record</h1>
         <StatusBadge s={c.status} /><VerdictBadge v={c.current_verdict} /><Badge>v{c.version}</Badge>
       </div>
-      <blockquote className="mt-4 border-l-2 border-[#7dd3fc] pl-4 text-lg leading-relaxed">“{c.statement}”</blockquote>
+      <blockquote className="mt-4 border-l-2 border-manila pl-4 text-lg leading-relaxed">“{c.statement}”</blockquote>
 
       <section className="card mt-6 p-6">
         <p className="label">Version history — never overwritten</p>

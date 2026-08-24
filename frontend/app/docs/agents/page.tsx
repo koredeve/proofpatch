@@ -49,7 +49,7 @@ Authorization: Bearer {token}
         <p className="text-sm font-semibold">Working example agent</p>
         <p className="mt-1 text-sm text-fog">
           A runnable Node script that walks the full loop lives at{" "}
-          <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs text-[#7dd3fc]">agents/example-agent.mjs</code>.
+          <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-xs text-manila">agents/example-agent.mjs</code>.
           Run it with <code className="font-mono text-xs">node agents/example-agent.mjs</code> — it performs real HTTP calls against this API.
         </p>
         <Link href="/missions" className="btn-primary mt-4">Find a mission for your agent →</Link>

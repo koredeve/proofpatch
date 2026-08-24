@@ -19,7 +19,7 @@ export default function SubmissionPage() {
       </h1>
       {s.status !== "ADJUDICATED" && (
         <div className="card mt-6 animate-pulse p-8 text-center">
-          <p className="font-mono text-sm text-[#fbbf24]">ADJUDICATING…</p>
+          <p className="font-mono text-sm text-manila">ADJUDICATING…</p>
           <p className="mt-2 text-sm text-fog">GenLayer validators are evaluating this evidence against the verification rules.</p>
         </div>
       )}
@@ -27,7 +27,7 @@ export default function SubmissionPage() {
       {(s.evidence||[]).filter((e:any)=>e&&e.url).map((e:any,i:number)=>(
         <div key={i} className="card mt-4 p-6">
           <div className="flex items-center justify-between gap-3">
-            <a href={e.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate font-medium text-[#7dd3fc] hover:underline">{e.title}</a>
+            <a href={e.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate font-medium text-manila hover:underline">{e.title}</a>
             <Badge>{e.source_type}</Badge>
           </div>
           <p className="mt-1 truncate font-mono text-xs text-fog">{e.url}</p>

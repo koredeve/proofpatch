@@ -21,7 +21,7 @@ export default function MissionDetail() {
     }).catch(e => setErr(e.message));
   }, [id]);
 
-  if (err) return <p className="mt-20 text-center text-[#f87171]">{err}</p>;
+  if (err) return <p className="mt-20 text-center text-stamp">{err}</p>;
   if (!m) return <p className="mt-20 animate-pulse text-center font-mono text-sm text-fog">loading mission…</p>;
 
   const steps = [
@@ -34,11 +34,11 @@ export default function MissionDetail() {
 
   return (
     <div className="fade-up">
-      <Link href="/missions" className="font-mono text-xs text-fog hover:text-[#7dd3fc]">← all missions</Link>
+      <Link href="/missions" className="font-mono text-xs uppercase tracking-[0.15em] text-fog transition-colors hover:text-manila">← all cases</Link>
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <h1 className="max-w-3xl text-2xl font-bold leading-snug md:text-3xl">{m.title}</h1>
+        <h1 className="max-w-3xl font-display text-3xl leading-tight md:text-4xl">{m.title}</h1>
         <div className="text-right">
-          <p className="font-mono text-2xl font-bold text-[#6ee7a0]">{m.reward}</p>
+          <p className="font-mono text-2xl font-bold text-cleared">{m.reward}</p>
           <p className="font-mono text-xs text-fog">{timeLeft(m.deadline)} · deadline {fmtDate(m.deadline)}</p>
         </div>
       </div>
@@ -51,7 +51,7 @@ export default function MissionDetail() {
         <section className="space-y-6 lg:col-span-3">
           <div className="card p-6">
             <p className="label">Claim under verification</p>
-            <blockquote className="border-l-2 border-[#7dd3fc] pl-4 text-lg font-medium leading-relaxed">“{m.statement || m.claim}”</blockquote>
+            <blockquote className="border-l-2 border-manila pl-4 text-lg font-medium leading-relaxed">“{m.statement || m.claim}”</blockquote>
             {m.current_verdict && m.current_verdict !== "PENDING" && (
               <div className="mt-4"><VerdictBadge v={m.current_verdict} /></div>
             )}
@@ -75,7 +75,7 @@ export default function MissionDetail() {
               {((m.submissions||[]) as any[]).length === 0 && <p className="rounded-lg border border-dashed border-[#232833] p-6 text-center text-sm text-fog">No submissions yet. Be the first researcher on this claim.</p>}
               {(m.submissions as any[]||[]).map((s: any) => (
                 <Link key={s.id} href={s.adjudication_id ? `/adjudications/${s.adjudication_id}` : `/submissions/${s.id}`}
-                  className="flex items-center justify-between rounded-lg border border-[#232833] px-4 py-3 text-sm hover:border-[#7dd3fc66] transition-colors">
+                  className="flex items-center justify-between rounded-lg border border-[#232833] px-4 py-3 text-sm hover:border-manila/50 transition-colors">
                   <span>
                     <span className="font-medium">{s.submitter_name}</span>
                     {s.user_type === "AGENT" && <span className="ml-2 rounded bg-[#a78bfa1f] px-1.5 py-0.5 font-mono text-[10px] text-[#a78bfa]">AGENT</span>}
@@ -93,9 +93,9 @@ export default function MissionDetail() {
             <p className="label">Lifecycle</p>
             <Timeline steps={steps} />
             <dl className="mt-6 space-y-3 border-t border-[#232833] pt-4 text-sm">
-              <div className="flex justify-between"><dt className="text-fog">Creator</dt><dd><Link href={`/profile/${m.creator_name}`} className="hover:text-[#7dd3fc]">{m.creator_name}</Link></dd></div>
+              <div className="flex justify-between"><dt className="text-fog">Creator</dt><dd><Link href={`/profile/${m.creator_name}`} className="hover:text-manila">{m.creator_name}</Link></dd></div>
               <div className="flex justify-between"><dt className="text-fog">Created</dt><dd className="font-mono">{fmtDateTime(m.created_at)}</dd></div>
-              {m.claim_id && <div className="flex justify-between"><dt className="text-fog">Claim record</dt><dd><Link href={`/claims/${m.claim_id}`} className="text-[#7dd3fc] hover:underline">view history →</Link></dd></div>}
+              {m.claim_id && <div className="flex justify-between"><dt className="text-fog">Claim record</dt><dd><Link href={`/claims/${m.claim_id}`} className="text-manila hover:underline">view history →</Link></dd></div>}
             </dl>
           </div>
         </aside>
