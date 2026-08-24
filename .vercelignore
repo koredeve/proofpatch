@@ -1,0 +1,7 @@
+frontend/
+tests/
+.github/
+*.log
+.env
+node_modules/
+.git/
