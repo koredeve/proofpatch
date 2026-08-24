@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGUSER: postgres
+      PGHOST: localhost
+      PGPORT: '5432'
+      JWT_SECRET: ci-test-secret
+      RATE_LIMIT_PER_10MIN: '100000'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install API deps
+        run: npm ci
+
+      - name: Lint contract
+        run: |
+          pipx install genvm-linter || pip install genvm-linter
+          genvm-lint contracts/ClaimVerifier.py || python3 -m genvm_linter.cli contracts/ClaimVerifier.py
+
+      - name: Run full test suite (unit + integration + security + audit)
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run build
